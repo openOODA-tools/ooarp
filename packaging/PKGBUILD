@@ -1,0 +1,21 @@
+# Maintainer: openOODA-tools <ops@openooda.org>
+pkgname=ooarp-bin
+_pkgname=ooarp
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Inspects and flushes neighbor discovery and ARP tables on local network segments."
+arch=('x86_64')
+url="https://github.com/openOODA-tools/ooarp"
+license=('Apache-2.0')
+depends=('glibc')
+provides=('ooarp')
+conflicts=('ooarp')
+source_x86_64=("${url}/releases/download/v${pkgver}/ooarp-linux-x86_64"
+               "uninstall.sh::https://raw.githubusercontent.com/openOODA-tools/${_pkgname}/v${pkgver}/uninstall.sh")
+sha256sums_x86_64=('SKIP'
+                   'SKIP')
+
+package() {
+    install -Dm755 "${srcdir}/ooarp-linux-x86_64" "${pkgdir}/usr/bin/ooarp"
+    install -Dm755 uninstall.sh "${pkgdir}/usr/bin/ooarp-uninstall"
+}
