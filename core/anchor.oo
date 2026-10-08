@@ -1,0 +1,15 @@
+// # ooarp Core Subsystem Anchor
+//
+// Logline: Consolidates and re-exports ARP entry models, MAC validators, table parsers, and auditors.
+//
+// Setup: Root barrel shim for core ARP domain.
+//
+// Beats:
+//   1. Re-export ArpEntry model and status classifications.
+//   2. Re-export IEEE 802 MAC validation and normalization.
+//   3. Re-export /proc/net/arp table parser and security auditor.
+
+import "arp_entry.oo";
+import "mac_validator.oo";
+import "table_parser.oo";
+import "neighbor_audit.oo";

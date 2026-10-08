@@ -1,0 +1,83 @@
+// # CLI Option Parser for ooarp
+//
+// Logline: Parses command-line arguments for neighbor discovery inspection, filtering, and audits.
+//
+// Setup: Pure string list processor without ambient side effects.
+//
+// Beats:
+//   1. Identify command flags for list, filter, audit, and MAC validation.
+//   2. Extract device filters and target IP operands.
+//   3. Dispatch help, version, and MCP server activation modes.
+
+pub type ArpOpts = struct {
+    action: String,
+    device_filter: String,
+    target_ip: String,
+    target_mac: String,
+    audit_mode: Bool,
+    json_mode: Bool,
+    mcp_mode: Bool,
+    help_mode: Bool,
+    version_mode: Bool
+};
+
+pub fn parse_arp_args(args: List[String]) -> ArpOpts {
+    let mut action: String = "list";
+    let mut device_filter: String = "";
+    let mut target_ip: String = "";
+    let mut target_mac: String = "";
+    let mut audit_mode: Bool = false;
+    let mut json_mode: Bool = false;
+    let mut mcp_mode: Bool = false;
+    let mut help_mode: Bool = false;
+    let mut version_mode: Bool = false;
+
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+
+    while i < n {
+        let arg: String = list_get(args, i);
+
+        if arg == "-h" || arg == "--help" {
+            help_mode = true;
+        } else if arg == "-v" || arg == "--version" {
+            version_mode = true;
+        } else if arg == "--mcp" {
+            mcp_mode = true;
+        } else if arg == "--json" {
+            json_mode = true;
+        } else if arg == "--audit" || arg == "audit" {
+            audit_mode = true;
+        } else if arg == "-a" || arg == "--all" {
+            action = "list";
+        } else if arg == "-i" || arg == "--device" || arg == "--interface" {
+            if i + 1 < n {
+                device_filter = list_get(args, i + 1);
+                i = i + 1;
+            }
+        } else if arg == "--validate-mac" {
+            action = "validate_mac";
+            if i + 1 < n {
+                target_mac = list_get(args, i + 1);
+                i = i + 1;
+            }
+        } else if !str_starts_with(arg, "-") {
+            if target_ip == "" {
+                target_ip = arg;
+            }
+        }
+        i = i + 1;
+    }
+
+    return ArpOpts {
+        action: action,
+        device_filter: device_filter,
+        target_ip: target_ip,
+        target_mac: target_mac,
+        audit_mode: audit_mode,
+        json_mode: json_mode,
+        mcp_mode: mcp_mode,
+        help_mode: help_mode,
+        version_mode: version_mode
+    };
+}

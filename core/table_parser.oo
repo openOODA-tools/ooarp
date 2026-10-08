@@ -1,0 +1,91 @@
+// # ARP Table Parser for /proc/net/arp
+//
+// Logline: Parses kernel ARP table records from /proc/net/arp into structured ArpEntry collections.
+//
+// Setup: Pure string line processor. Operates without direct system calls or ambient authority.
+//
+// Beats:
+//   1. Split table into distinct lines and discard header row.
+//   2. Extract whitespace-delimited columns (IP, HW type, Flags, MAC, Mask, Device).
+//   3. Construct validated ArpEntry records and return collection.
+
+import "core/arp_entry.oo";
+
+fn split_words(line: String) -> List[String] {
+    let mut words: List[String] = list_new();
+    let n: Int = chars_len(line);
+    let mut cur: String = "";
+    let mut i: Int = 0;
+
+    while i < n {
+        let c: String = char_at(line, i);
+        if c == " " || c == "\t" || c == "\r" || c == "\n" {
+            if chars_len(cur) > 0 {
+                words = list_push(words, cur);
+                cur = "";
+            }
+        } else {
+            cur = cur + c;
+        }
+        i = i + 1;
+    }
+    if chars_len(cur) > 0 {
+        words = list_push(words, cur);
+    }
+    return words;
+}
+
+pub fn parse_arp_table(content: String) -> List[ArpEntry] {
+    let mut out: List[ArpEntry] = list_new();
+    let n: Int = chars_len(content);
+    let mut line: String = "";
+    let mut i: Int = 0;
+    let mut is_first_line: Bool = true;
+
+    while i < n {
+        let c: String = char_at(content, i);
+        if c == "\n" {
+            let trimmed: String = str_trim(line);
+            if chars_len(trimmed) > 0 {
+                if is_first_line {
+                    is_first_line = false;
+                } else {
+                    let cols: List[String] = split_words(trimmed);
+                    let col_count: Int = list_len(cols);
+                    if col_count >= 6 {
+                        let ip: String = list_get(cols, 0);
+                        let hw_type: String = list_get(cols, 1);
+                        let flags: String = list_get(cols, 2);
+                        let mac: String = list_get(cols, 3);
+                        let mask: String = list_get(cols, 4);
+                        let device: String = list_get(cols, 5);
+                        let entry: ArpEntry = make_arp_entry(ip, hw_type, flags, mac, mask, device);
+                        out = list_push(out, entry);
+                    }
+                }
+            }
+            line = "";
+        } else {
+            line = line + c;
+        }
+        i = i + 1;
+    }
+
+    let trimmed_last: String = str_trim(line);
+    if chars_len(trimmed_last) > 0 && !is_first_line {
+        let cols: List[String] = split_words(trimmed_last);
+        if list_len(cols) >= 6 {
+            let entry: ArpEntry = make_arp_entry(
+                list_get(cols, 0),
+                list_get(cols, 1),
+                list_get(cols, 2),
+                list_get(cols, 3),
+                list_get(cols, 4),
+                list_get(cols, 5)
+            );
+            out = list_push(out, entry);
+        }
+    }
+
+    return out;
+}

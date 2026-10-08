@@ -1,0 +1,67 @@
+// # IEEE 802 MAC Address Validator and Classifier
+//
+// Logline: Validates and classifies Ethernet hardware MAC addresses into unicast, multicast, and broadcast.
+//
+// Setup: Pure string analyzer. Enforces strict hex representation without ambient authority.
+//
+// Beats:
+//   1. Check MAC syntax for 6-byte hex format separated by colons or hyphens.
+//   2. Normalize MAC string into lowercase canonical format.
+//   3. Classify address as unicast, multicast, broadcast, or locally administered.
+
+fn is_hex_char(b: Int) -> Bool {
+    return (b >= 48 && b <= 57) || (b >= 97 && b <= 102) || (b >= 65 && b <= 70);
+}
+
+pub fn is_valid_mac(mac: String) -> Bool {
+    let s: String = str_trim(mac);
+    let n: Int = chars_len(s);
+    if n != 17 { return false; }
+    let mut i: Int = 0;
+    while i < 17 {
+        if i % 3 == 2 {
+            let sep: String = char_at(s, i);
+            if sep != ":" && sep != "-" { return false; }
+        } else {
+            let b: Int = byte_at(s, i);
+            if !is_hex_char(b) { return false; }
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn normalize_mac(mac: String) -> String {
+    let s: String = str_trim(mac);
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b >= 65 && b <= 70 {
+            out = out + char_at("abcdef", b - 65);
+        } else if char_at(s, i) == "-" {
+            out = out + ":";
+        } else {
+            out = out + char_at(s, i);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn is_broadcast_mac(mac: String) -> Bool {
+    let norm: String = normalize_mac(mac);
+    return norm == "ff:ff:ff:ff:ff:ff";
+}
+
+pub fn is_multicast_mac(mac: String) -> Bool {
+    let norm: String = normalize_mac(mac);
+    if chars_len(norm) < 2 { return false; }
+    let first_byte_hex: String = str_slice(norm, 0, 2);
+    let b1: Int = byte_at(first_byte_hex, 1);
+    let val: Int = if b1 >= 48 && b1 <= 57 { b1 - 48 }
+        else if b1 >= 97 && b1 <= 102 { b1 - 87 }
+        else { 0 };
+    return val % 2 != 0;
+}

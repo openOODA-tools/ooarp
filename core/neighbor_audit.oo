@@ -1,0 +1,60 @@
+// # ARP Table Anomaly and Poisoning Auditor
+//
+// Logline: Audits ARP cache for duplicate MAC addresses, incomplete entries, and spoofing indicators.
+//
+// Setup: Pure record analyzer without ambient authority.
+//
+// Beats:
+//   1. Tally complete, incomplete, and static entries.
+//   2. Cross-reference IP mappings to detect duplicate MAC collisions.
+//   3. Emit structured health assessment and threat diagnostics.
+
+import "core/arp_entry.oo";
+
+pub type ArpAudit = struct {
+    total_entries: Int,
+    complete_count: Int,
+    incomplete_count: Int,
+    duplicate_mac_count: Int,
+    is_healthy: Bool,
+    details: String
+};
+
+pub fn audit_arp_entries(entries: List[ArpEntry]) -> ArpAudit {
+    let n: Int = list_len(entries);
+    let mut complete: Int = 0;
+    let mut incomplete: Int = 0;
+    let mut duplicates: Int = 0;
+    let mut issue_details: String = "";
+
+    let mut i: Int = 0;
+    while i < n {
+        let e1: ArpEntry = list_get(entries, i);
+        if e1.is_complete {
+            complete = complete + 1;
+            let mut j: Int = i + 1;
+            while j < n {
+                let e2: ArpEntry = list_get(entries, j);
+                if e2.is_complete && e1.mac == e2.mac && e1.ip != e2.ip {
+                    duplicates = duplicates + 1;
+                    if chars_len(issue_details) > 0 { issue_details = issue_details + "; "; }
+                    issue_details = issue_details + "duplicate MAC " + e1.mac + " on " + e1.ip + " and " + e2.ip;
+                }
+                j = j + 1;
+            }
+        } else {
+            incomplete = incomplete + 1;
+        }
+        i = i + 1;
+    }
+
+    let healthy: Bool = duplicates == 0;
+    return ArpAudit {
+        total_entries: n,
+        complete_count: complete,
+        incomplete_count: incomplete,
+        duplicate_mac_count: duplicates,
+        is_healthy: healthy,
+        details: issue_details
+    };
+}

@@ -1,0 +1,14 @@
+// # IPC Subsystem Anchor for ooarp
+//
+// Logline: Consolidates and re-exports argument options, JSON extractors, and MCP server routines.
+//
+// Setup: Root barrel shim for IPC domain.
+//
+// Beats:
+//   1. Re-export JSON field extraction and string escaping utilities.
+//   2. Re-export CLI argument parser and options model.
+//   3. Re-export Model Context Protocol stdio server handler.
+
+import "json_field.oo";
+import "arp_opts.oo";
+import "mcp_serve.oo";

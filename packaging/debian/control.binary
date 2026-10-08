@@ -1,0 +1,11 @@
+Package: ooarp
+Version: 0.2.0-1
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Depends: libc6
+Description: ARP CACHE TOOL
+ Inspects and flushes neighbor discovery and ARP tables on local network segments.
+ Capability-bounded openOODA utility with zero ambient authority,
+ MAC address verification, and native Model Context Protocol (MCP) surface.

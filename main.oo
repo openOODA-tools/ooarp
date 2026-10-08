@@ -1,52 +1,134 @@
-// # ooarp Main Entry Point
+// # ooarp Main Entry Point - Sovereign Neighbor Discovery Inspector
 //
-// Logline: Inspects and flushes neighbor discovery and ARP tables on local network segments.
+// Logline: Argument gate, ARP table parser, MAC validator, and MCP stdio server.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Requires FsReadCap, NetCap, ProcessCap, EnvCap. Operates with zero ambient authority.
 //
 // Beats:
-//   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded ooarp operations.
-//   3. Format and output structured results to standard output.
+//   1. Dispatch --help, --version, and --mcp early without side effects.
+//   2. Parse network device filters, target IP addresses, and audit switches.
+//   3. Read /proc/net/arp and format structured neighbor discovery diagnostics.
+
+import "core/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";
 
 fn render_help() -> String {
-    return "ooarp 0.1.0 (openOODA sovereign network & egress)\n"
-        + "usage: ooarp [options] [ARGUMENTS]...\n\n"
-        + "Inspects and flushes neighbor discovery and ARP tables on local network segments.\n\n"
-        + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
+    return "Usage: ooarp [OPTIONS] [IP_ADDRESS]\n\n" +
+        "Inspects, validates, and audits neighbor discovery and ARP tables on local network segments.\n\n" +
+        "Commands & Operations:\n" +
+        "  -a, --all                List all entries in local ARP / neighbor discovery cache\n" +
+        "  -i, --device <IFACE>     Filter entries by network interface device (e.g. eth0, wlan0)\n" +
+        "      --audit              Audit ARP cache for duplicate MAC collisions and anomalies\n" +
+        "      --validate-mac <MAC> Validate MAC syntax and classify IEEE 802 addressing\n\n" +
+        "Options:\n" +
+        "      --json               Output results formatted as JSON Lines\n" +
+        "      --mcp                Run as Model Context Protocol stdio server\n" +
+        "  -h, --help               Display this help and exit\n" +
+        "  -v, --version            Output version information and exit\n";
 }
 
-fn render_version() -> String {
-    return "ooarp 0.1.0 (openOODA sovereign network & egress)\n";
-}
+pub fn main(
+    fs: &FsReadCap,
+    net: &NetCap,
+    proc_cap: &ProcessCap,
+    env: &EnvCap,
+    args: List[String]
+) -> Result[Int, String] {
+    let opts: ArpOpts = parse_arp_args(args);
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
+    if opts.help_mode {
+        print(render_help());
+        return Ok(0);
+    }
+    if opts.version_mode {
+        println("ooarp 0.2.0 (openOODA sovereign network & egress)");
+        return Ok(0);
+    }
+    if opts.mcp_mode {
+        run_mcp_server(fs);
+        return Ok(0);
+    }
+
+    if opts.action == "validate_mac" {
+        let is_valid: Bool = is_valid_mac(opts.target_mac);
+        let norm: String = if is_valid { normalize_mac(opts.target_mac) } else { opts.target_mac };
+        let is_bc: Bool = is_valid && is_broadcast_mac(norm);
+        let is_mc: Bool = is_valid && is_multicast_mac(norm);
+
+        if opts.json_mode {
+            let j: String = "{\"mac\":\"" + json_escape(norm) + "\",\"is_valid\":" +
+                (if is_valid { "true" } else { "false" }) + ",\"is_broadcast\":" +
+                (if is_bc { "true" } else { "false" }) + ",\"is_multicast\":" +
+                (if is_mc { "true" } else { "false" }) + "}";
+            println(j);
+        } else {
+            println("MAC Address: " + norm);
+            println("Valid Syntax: " + (if is_valid { "YES" } else { "NO" }));
+            println("Broadcast:    " + (if is_bc { "YES" } else { "NO" }));
+            println("Multicast:    " + (if is_mc { "YES" } else { "NO" }));
+        }
+        if !is_valid {
+            process_exit(1);
+            return Ok(1);
+        }
+        return Ok(0);
+    }
+
+    let arp_path: String = if opts.target_ip != "" && str_contains(opts.target_ip, "/") {
+        opts.target_ip
+    } else {
+        "/proc/net/arp"
+    };
+
+    let read_res: Result[String, String] = read_file(fs, arp_path);
+    let table_content: String = match read_res { Ok(s) => s, Err(_) => "" };
+    let entries: List[ArpEntry] = parse_arp_table(table_content);
+
+    if opts.audit_mode {
+        let audit: ArpAudit = audit_arp_entries(entries);
+        if opts.json_mode {
+            println(render_audit_json(audit));
+        } else {
+            println("Total ARP Entries:  " + to_string(audit.total_entries));
+            println("Complete Entries:   " + to_string(audit.complete_count));
+            println("Incomplete Entries: " + to_string(audit.incomplete_count));
+            println("Duplicate MACs:     " + to_string(audit.duplicate_mac_count));
+            println("Cache Health:       " + (if audit.is_healthy { "HEALTHY" } else { "ANOMALIES DETECTED" }));
+            if chars_len(audit.details) > 0 {
+                println("Audit Details:      " + audit.details);
+            }
+        }
+        if !audit.is_healthy {
+            process_exit(1);
+            return Ok(1);
+        }
+        return Ok(0);
+    }
+
+    let n: Int = list_len(entries);
+    let mut matching_count: Int = 0;
     let mut i: Int = 0;
 
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
-        }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"ooarp\"}}\n");
-            return 0;
+    if !opts.json_mode && n > 0 {
+        println(render_arp_header());
+    }
+
+    while i < n {
+        let e: ArpEntry = list_get(entries, i);
+        let matches_dev: Bool = (opts.device_filter == "") || (e.device == opts.device_filter);
+        let matches_ip: Bool = (opts.target_ip == "" || str_contains(opts.target_ip, "/")) || (e.ip == opts.target_ip);
+
+        if matches_dev && matches_ip {
+            if opts.json_mode {
+                println(render_arp_json(e));
+            } else {
+                println(render_arp_row(e));
+            }
+            matching_count = matching_count + 1;
         }
         i = i + 1;
     }
 
-    print("ooarp: sovereign capability-bounded utility ready\n");
-    return 0;
+    return Ok(0);
 }

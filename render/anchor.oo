@@ -1,0 +1,11 @@
+// # Render Subsystem Anchor for ooarp
+//
+// Logline: Consolidates and re-exports ARP table renderers and JSON serializing routines.
+//
+// Setup: Root barrel shim for render domain.
+//
+// Beats:
+//   1. Re-export table header and row formatters.
+//   2. Re-export JSON record and security audit encoders.
+
+import "arp_theme.oo";

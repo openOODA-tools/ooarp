@@ -3,3 +3,4 @@ build/
 *.bin
 *.o
 .DS_Store
+.ooda-cache/

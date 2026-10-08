@@ -1,0 +1,114 @@
+// # Model Context Protocol (MCP) Stdio Server for ooarp
+//
+// Logline: JSON-RPC 2.0 stdio server providing streaming ARP table inspection and MAC validation tools.
+//
+// Setup: Demands FsReadCap and ProcessCap for stdio streaming. Operates without ambient authority.
+//
+// Beats:
+//   1. Process incoming JSON-RPC 2.0 requests over standard input.
+//   2. Dispatch initialize, tools/list, and tools/call methods.
+//   3. Stream structured capability-bounded responses back to client.
+
+import "core/arp_entry.oo";
+import "core/mac_validator.oo";
+import "core/table_parser.oo";
+import "core/neighbor_audit.oo";
+import "render/arp_theme.oo";
+import "ipc/json_field.oo";
+
+pub fn run_mcp_server(fs: &FsReadCap) {
+    let mut running: Bool = true;
+    while running {
+        let line_res: Result[String, String] = oo_read_stdin_chunk(fs, 8192);
+        if !line_res.is_ok() {
+            running = false;
+        } else {
+            let line: String = match line_res { Ok(s) => s, Err(_) => "" };
+            let trimmed: String = str_trim(line);
+            if chars_len(trimmed) == 0 {
+                running = false;
+            } else {
+                let id: String = json_get_field(trimmed, "id");
+                let method: String = json_get_string(trimmed, "method");
+
+                if method == "initialize" {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"protocolVersion\":\"2024-11-05\"," +
+                        "\"serverInfo\":{\"name\":\"ooarp\",\"version\":\"0.2.0\"}," +
+                        "\"capabilities\":{\"tools\":{}}}}";
+                    println(resp);
+                } else if method == "notifications/initialized" {
+                    // ack
+                } else if method == "tools/list" {
+                    let t1: String = "{\"name\":\"arp_list\",\"description\":\"List local ARP / neighbor discovery table entries\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"device\":{\"type\":\"string\"}}}}";
+                    let t2: String = "{\"name\":\"arp_audit\",\"description\":\"Audit ARP cache for duplicate MAC collisions and spoofing anomalies\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}";
+                    let t3: String = "{\"name\":\"arp_validate_mac\",\"description\":\"Validate MAC address syntax and classify IEEE 802 unicast/multicast\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"mac\":{\"type\":\"string\"}},\"required\":[\"mac\"]}}";
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"tools\":[" + t1 + "," + t2 + "," + t3 + "]}}";
+                    println(resp);
+                } else if method == "tools/call" {
+                    let params: String = json_get_field(trimmed, "params");
+                    let tool_name: String = json_get_string(params, "name");
+                    let args: String = json_get_field(params, "arguments");
+
+                    if tool_name == "arp_validate_mac" {
+                        let mac_raw: String = json_get_string(args, "mac");
+                        let is_valid: Bool = is_valid_mac(mac_raw);
+                        let norm: String = if is_valid { normalize_mac(mac_raw) } else { mac_raw };
+                        let is_bc: Bool = is_valid && is_broadcast_mac(norm);
+                        let is_mc: Bool = is_valid && is_multicast_mac(norm);
+                        let text: String = "{\"mac\":\"" + json_escape(norm) + "\",\"is_valid\":" +
+                            (if is_valid { "true" } else { "false" }) + ",\"is_broadcast\":" +
+                            (if is_bc { "true" } else { "false" }) + ",\"is_multicast\":" +
+                            (if is_mc { "true" } else { "false" }) + "}";
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "arp_audit" {
+                        let r: Result[String, String] = read_file(fs, "/proc/net/arp");
+                        let content: String = match r { Ok(s) => s, Err(_) => "" };
+                        let entries: List[ArpEntry] = parse_arp_table(content);
+                        let audit: ArpAudit = audit_arp_entries(entries);
+                        let j: String = render_audit_json(audit);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(j) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "arp_list" {
+                        let r: Result[String, String] = read_file(fs, "/proc/net/arp");
+                        let content: String = match r { Ok(s) => s, Err(_) => "" };
+                        let entries: List[ArpEntry] = parse_arp_table(content);
+                        let dev_filter: String = json_get_string(args, "device");
+                        let mut j: String = "[";
+                        let n: Int = list_len(entries);
+                        let mut count: Int = 0;
+                        let mut i: Int = 0;
+                        while i < n {
+                            let e: ArpEntry = list_get(entries, i);
+                            if dev_filter == "" || e.device == dev_filter {
+                                if count > 0 { j = j + ","; }
+                                j = j + render_arp_json(e);
+                                count = count + 1;
+                            }
+                            i = i + 1;
+                        }
+                        j = j + "]";
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(j) + "\"}]}}";
+                        println(resp);
+                    } else {
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                        println(resp);
+                    }
+                } else {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"error\":{\"code\":-32601,\"message\":\"Unsupported method\"}}";
+                    println(resp);
+                }
+            }
+        }
+    }
+}

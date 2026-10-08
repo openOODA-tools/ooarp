@@ -1,13 +1,14 @@
-// # ooarp Root Anchor
+// # ooarp Root Component Anchor
 //
-// Logline: Top-level anchor re-exporting options, core logic, render, and ipc subsystems.
+// Logline: Consolidates core engines, terminal renderers, and IPC communication layers.
 //
-// Setup: Pure shim re-exporting all ooarp subsystem anchors.
+// Setup: Root barrel shim for the ooarp executable.
 //
 // Beats:
-//   1. Re-export options parsing subsystem.
-//   2. Re-export core ooarp execution engine.
-//   3. Re-export render formatting subsystem.
-//   4. Re-export Model Context Protocol (MCP) IPC subsystem.
+//   1. Re-export core ARP models, MAC validators, and table parsers.
+//   2. Re-export render formatters and table styling components.
+//   3. Re-export IPC option parsers and Model Context Protocol servers.
 
-import "main.oo";
+import "core/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";

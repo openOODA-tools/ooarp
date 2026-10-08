@@ -1,0 +1,55 @@
+// # ARP Cache Entry Record
+//
+// Logline: Data structure representing a neighbor discovery ARP table record.
+//
+// Setup: Pure record definitions without ambient authority.
+//
+// Beats:
+//   1. Define ArpEntry struct capturing IPv4 address, MAC, interface, and flags.
+//   2. Create constructor with normalized empty defaults.
+//   3. Provide helper accessors for status classification (permanent, dynamic, incomplete).
+
+pub type ArpEntry = struct {
+    ip: String,
+    hw_type: String,
+    flags: String,
+    mac: String,
+    mask: String,
+    device: String,
+    is_complete: Bool
+};
+
+pub fn make_arp_entry(
+    ip: String,
+    hw_type: String,
+    flags: String,
+    mac: String,
+    mask: String,
+    device: String
+) -> ArpEntry {
+    let clean_mac: String = str_trim(mac);
+    let complete: Bool = clean_mac != "00:00:00:00:00:00" && chars_len(clean_mac) >= 17;
+    return ArpEntry {
+        ip: str_trim(ip),
+        hw_type: str_trim(hw_type),
+        flags: str_trim(flags),
+        mac: clean_mac,
+        mask: str_trim(mask),
+        device: str_trim(device),
+        is_complete: complete
+    };
+}
+
+pub fn arp_flag_description(flags: String) -> String {
+    let f: String = str_trim(flags);
+    if f == "0x2" || f == "2" {
+        return "C (Complete)";
+    }
+    if f == "0x6" || f == "6" {
+        return "P (Permanent/Static)";
+    }
+    if f == "0x0" || f == "0" {
+        return "I (Incomplete)";
+    }
+    return f;
+}

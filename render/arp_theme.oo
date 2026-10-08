@@ -1,0 +1,91 @@
+// # ARP Terminal Table and JSON Formatter
+//
+// Logline: Formats ARP cache tables, audit diagnostics, and JSON Lines records.
+//
+// Setup: Pure string formatter without ambient side effects.
+//
+// Beats:
+//   1. Format table header row with standard column alignments.
+//   2. Format individual ARP entry rows with state classifications.
+//   3. Render entries and security audit reports into JSON strings.
+
+import "core/arp_entry.oo";
+import "core/neighbor_audit.oo";
+
+fn pad_right(s: String, width: Int) -> String {
+    let slen: Int = chars_len(s);
+    if slen >= width { return s; }
+    let mut out: String = s;
+    let mut i: Int = slen;
+    while i < width {
+        out = out + " ";
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn render_arp_header() -> String {
+    return pad_right("IP Address", 17) + " " +
+        pad_right("HW Type", 9) + " " +
+        pad_right("Flags", 7) + " " +
+        pad_right("HW Address", 19) + " " +
+        pad_right("Device", 10) + " " +
+        "Status";
+}
+
+pub fn render_arp_row(entry: ArpEntry) -> String {
+    let status_str: String = arp_flag_description(entry.flags);
+    return pad_right(entry.ip, 17) + " " +
+        pad_right(entry.hw_type, 9) + " " +
+        pad_right(entry.flags, 7) + " " +
+        pad_right(entry.mac, 19) + " " +
+        pad_right(entry.device, 10) + " " +
+        status_str;
+}
+
+pub fn escape_json(s: String) -> String {
+    let mut out: String = "";
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "\\" {
+            out = out + "\\\\";
+        } else if c == "\"" {
+            out = out + "\\\"";
+        } else if c == "\n" {
+            out = out + "\\n";
+        } else if c == "\r" {
+            out = out + "\\r";
+        } else if c == "\t" {
+            out = out + "\\t";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn render_arp_json(entry: ArpEntry) -> String {
+    let mut j: String = "{";
+    j = j + "\"ip\":\"" + escape_json(entry.ip) + "\",";
+    j = j + "\"hw_type\":\"" + escape_json(entry.hw_type) + "\",";
+    j = j + "\"flags\":\"" + escape_json(entry.flags) + "\",";
+    j = j + "\"mac\":\"" + escape_json(entry.mac) + "\",";
+    j = j + "\"mask\":\"" + escape_json(entry.mask) + "\",";
+    j = j + "\"device\":\"" + escape_json(entry.device) + "\",";
+    j = j + "\"complete\":" + (if entry.is_complete { "true" } else { "false" }) + "}";
+    return j;
+}
+
+pub fn render_audit_json(audit: ArpAudit) -> String {
+    let mut j: String = "{";
+    j = j + "\"total\":" + to_string(audit.total_entries) + ",";
+    j = j + "\"complete\":" + to_string(audit.complete_count) + ",";
+    j = j + "\"incomplete\":" + to_string(audit.incomplete_count) + ",";
+    j = j + "\"duplicates\":" + to_string(audit.duplicate_mac_count) + ",";
+    j = j + "\"healthy\":" + (if audit.is_healthy { "true" } else { "false" }) + ",";
+    j = j + "\"details\":\"" + escape_json(audit.details) + "\"}";
+    return j;
+}
